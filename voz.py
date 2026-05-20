@@ -6,27 +6,47 @@ import time
 
 user32 = ctypes.windll.user32
 
+# Mapeamento de variações → ação
 COMANDOS = {
-    "enter": lambda: pyautogui.press("enter"),
-    "new line": lambda: pyautogui.press("enter"),
-    "clear": lambda: (pyautogui.hotkey("ctrl", "a"), pyautogui.press("delete")),
+    # Enter
+    "enter": "enter",
+    "entrar": "enter",
+    "inter": "enter",
+    "enter key": "enter",
+    # New line
+    "new line": "new_line",
+    "new lan": "new_line",
+    "nu line": "new_line",
+    "nova linha": "new_line",
+    # Clear
+    "clear": "clear",
+    "claro": "clear",
+    "clier": "clear",
+    "clear all": "clear",
+    # Backspace
+    "apagar": "backspace",
+    "delete": "backspace",
+    "deletar": "backspace",
+}
+
+ACOES = {
+    "enter":     lambda: pyautogui.press("enter"),
+    "new_line":  lambda: pyautogui.press("enter"),
+    "clear":     lambda: (pyautogui.hotkey("ctrl", "a"), pyautogui.press("delete")),
+    "backspace": lambda: pyautogui.press("backspace"),
 }
 
 def restaurar_foco(hwnd):
     if hwnd:
         try:
-            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.ShowWindow(hwnd, 9)
             user32.SetForegroundWindow(hwnd)
             time.sleep(0.15)
         except Exception:
             pass
 
 print("=== DITADO POR VOZ ===")
-print("Comandos de voz disponíveis:")
-print("  'enter'    → pressiona Enter")
-print("  'new line' → nova linha")
-print("  'clear'    → limpa tudo")
-print()
+print("Comandos: enter | new line | clear | apagar")
 print("Pressione Ctrl+C para parar.\n")
 
 r = sr.Recognizer()
@@ -43,35 +63,39 @@ while True:
             print("Ouvindo...")
             audio = r.listen(source, timeout=None, phrase_time_limit=15)
 
-        # Salva a janela ativa logo após capturar o áudio
         hwnd = user32.GetForegroundWindow()
 
         print("Processando...")
         texto = r.recognize_google(audio, language="pt-BR").strip()
-        print(f"Você disse: {texto}")
+        texto_lower = texto.lower()
+        print(f"[reconhecido]: '{texto_lower}'")  # DEBUG: mostra exatamente o que chegou
 
-        # Restaura o foco para a janela onde o usuário estava
         restaurar_foco(hwnd)
 
-        texto_lower = texto.lower()
-
+        # Verifica se o texto inteiro é um comando
         if texto_lower in COMANDOS:
-            print(f"[comando: {texto_lower}]")
-            COMANDOS[texto_lower]()
-        else:
-            for cmd, acao in COMANDOS.items():
-                if texto_lower.endswith(" " + cmd):
-                    texto_sem_cmd = texto[:-(len(cmd) + 1)].strip()
-                    if texto_sem_cmd:
-                        pyperclip.copy(texto_sem_cmd + " ")
-                        pyautogui.hotkey("ctrl", "v")
-                        time.sleep(0.1)
-                    print(f"[comando: {cmd}]")
-                    acao()
-                    break
-            else:
-                pyperclip.copy(texto + " ")
-                pyautogui.hotkey("ctrl", "v")
+            acao = COMANDOS[texto_lower]
+            print(f"[comando]: {acao}")
+            ACOES[acao]()
+            continue
+
+        # Verifica se termina com um comando
+        executou_cmd = False
+        for cmd, acao in COMANDOS.items():
+            if texto_lower.endswith(" " + cmd):
+                texto_sem_cmd = texto[:-(len(cmd) + 1)].strip()
+                if texto_sem_cmd:
+                    pyperclip.copy(texto_sem_cmd + " ")
+                    pyautogui.hotkey("ctrl", "v")
+                    time.sleep(0.1)
+                print(f"[comando]: {acao}")
+                ACOES[acao]()
+                executou_cmd = True
+                break
+
+        if not executou_cmd:
+            pyperclip.copy(texto + " ")
+            pyautogui.hotkey("ctrl", "v")
 
     except sr.UnknownValueError:
         print("(não entendi, fale novamente)")
