@@ -89,6 +89,7 @@ while True:
         print(f"[reconhecido]: '{texto_lower}'")  # DEBUG: mostra exatamente o que chegou
 
         restaurar_foco(hwnd)
+        time.sleep(3)
 
         # Verifica se o texto inteiro é um comando
         if texto_lower in COMANDOS:
