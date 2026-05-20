@@ -8,10 +8,42 @@ user32 = ctypes.windll.user32
 
 # Mapeamento de variações → ação
 COMANDOS = {
-    "executar enviar":     "enter",
-    "executar nova linha": "new_line",
-    "executar linha nova": "backspace",
-    "executar limpa":      "clear",
+    # Enviar (Enter)
+    "executar enviar":   "enter",
+    "executar envia":    "enter",
+    "executar invia":    "enter",
+    "executar enviado":  "enter",
+    "executar envio":    "enter",
+    "executar mandar":   "enter",
+    "executar manda":    "enter",
+    "executar send":     "enter",
+
+    # Nova linha (Shift+Enter)
+    "executar nova linha":  "new_line",
+    "executar nova lin":    "new_line",
+    "executar novalinha":   "new_line",
+    "executar nova lina":   "new_line",
+    "executar nova line":   "new_line",
+    "executar novo linha":  "new_line",
+
+    # Backspace (linha nova)
+    "executar linha nova":  "backspace",
+    "executar lin nova":    "backspace",
+    "executar lina nova":   "backspace",
+    "executar linha novo":  "backspace",
+    "executar apagar":      "backspace",
+    "executar apaga":       "backspace",
+
+    # Limpar tudo
+    "executar limpa":    "clear",
+    "executar limpar":   "clear",
+    "executar limp":     "clear",
+    "executar limpas":   "clear",
+    "executar limpeza":  "clear",
+    "executar limpo":    "clear",
+    "executar clear":    "clear",
+    "executar claro":    "clear",
+    "executar tudo":     "clear",
 }
 
 ACOES = {
