@@ -68,6 +68,7 @@ print("Comandos: 'executar enviar' | 'executar nova linha' | 'executar linha nov
 print("Pressione Ctrl+C para parar.\n")
 
 r = sr.Recognizer()
+r.pause_threshold = 3  # aguarda 3 segundos de silêncio antes de processar
 mic = sr.Microphone()
 
 with mic as source:
@@ -89,7 +90,6 @@ while True:
         print(f"[reconhecido]: '{texto_lower}'")  # DEBUG: mostra exatamente o que chegou
 
         restaurar_foco(hwnd)
-        time.sleep(3)
 
         # Verifica se o texto inteiro é um comando
         if texto_lower in COMANDOS:
