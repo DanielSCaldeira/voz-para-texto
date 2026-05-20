@@ -2,6 +2,7 @@ import speech_recognition as sr
 import pyautogui
 import pyperclip
 import ctypes
+import subprocess
 import time
 
 user32 = ctypes.windll.user32
@@ -67,8 +68,54 @@ print("=== DITADO POR VOZ ===")
 print("Comandos: 'executar enviar' | 'executar nova linha' | 'executar linha nova' | 'executar limpa'")
 print("Pressione Ctrl+C para parar.\n")
 
+# Define volume do microfone para 100% via Windows Core Audio API
+_ps_mic_volume = r"""
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+[Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDeviceEnumerator {
+    int NotImpl1();
+    [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppDevice);
+}
+[Guid("D666063F-1587-4E43-81F1-B948E807363F")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDevice {
+    [PreserveSig] int Activate(ref Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
+}
+[Guid("5CDF2C82-841E-4546-9722-0CF74078229A")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioEndpointVolume {
+    int NotImpl1(); int NotImpl2();
+    [PreserveSig] int SetMasterVolumeLevelScalar(float fLevel, ref Guid pguidEventContext);
+}
+[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+class MMDeviceEnumeratorComObject {}
+public class MicAudio {
+    static readonly IMMDeviceEnumerator e = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+    public static void SetVolume(float level) {
+        IMMDevice dev; e.GetDefaultAudioEndpoint(1, 1, out dev);
+        Guid iid = typeof(IAudioEndpointVolume).GUID; object o;
+        dev.Activate(ref iid, 23, IntPtr.Zero, out o);
+        IAudioEndpointVolume vol = (IAudioEndpointVolume)o;
+        Guid empty = Guid.Empty;
+        vol.SetMasterVolumeLevelScalar(level, ref empty);
+    }
+}
+"@
+[MicAudio]::SetVolume(1.0)
+"""
+try:
+    subprocess.run(["powershell", "-Command", _ps_mic_volume], capture_output=True, timeout=10)
+    print("Microfone definido para volume máximo.")
+except Exception as e:
+    print(f"Aviso: não foi possível ajustar o volume do microfone: {e}")
+
 r = sr.Recognizer()
-r.pause_threshold = 3  # aguarda 3 segundos de silêncio antes de processar
+r.pause_threshold = 3       # aguarda 3 segundos de silêncio antes de processar
+r.energy_threshold = 200    # sensibilidade alta (padrão=300)
+r.dynamic_energy_threshold = True  # ajusta automaticamente ao ambiente
 mic = sr.Microphone()
 
 with mic as source:
