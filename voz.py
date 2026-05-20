@@ -8,7 +8,7 @@ user32 = ctypes.windll.user32
 
 # Mapeamento de variações → ação
 COMANDOS = {
-    "executar enter":      "enter",
+    "executar enviar":     "enter",
     "executar nova linha": "new_line",
     "executar linha nova": "backspace",
     "executar limpa":      "clear",
@@ -32,7 +32,7 @@ def restaurar_foco(hwnd):
             pass
 
 print("=== DITADO POR VOZ ===")
-print("Comandos: 'executar enter' | 'executar nova linha' | 'executar linha nova' | 'executar limpa'")
+print("Comandos: 'executar enviar' | 'executar nova linha' | 'executar linha nova' | 'executar limpa'")
 print("Pressione Ctrl+C para parar.\n")
 
 r = sr.Recognizer()
