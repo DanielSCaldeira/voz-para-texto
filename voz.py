@@ -7,6 +7,10 @@ Ditado por voz — versão avançada
 - Undo: 'executar desfazer' apaga o último texto digitado
 """
 
+import os
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"  # cache sem symlinks no Windows
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+
 import speech_recognition as sr
 import pyautogui
 import pyperclip
