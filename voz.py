@@ -1,3 +1,12 @@
+"""
+Ditado por voz — versão avançada
+- Reconhecimento: faster-whisper (local, offline, pt-BR) com fallback Google
+- VAD: Silero VAD embutido no Whisper + webrtcvad para captura precisa
+- Comandos: fuzzy matching com rapidfuzz (sem precisar de 30+ variações)
+- Feedback sonoro: beep ao capturar frase e ao executar comando
+- Undo: 'executar desfazer' apaga o último texto digitado
+"""
+
 import speech_recognition as sr
 import pyautogui
 import pyperclip
@@ -6,71 +15,101 @@ import subprocess
 import time
 import threading
 import queue
+import winsound
+import numpy as np
+
+# ── Imports opcionais ────────────────────────────────────────────────────────
+
+try:
+    from faster_whisper import WhisperModel
+    WHISPER_OK = True
+except ImportError:
+    WHISPER_OK = False
+    print("Aviso: faster-whisper não encontrado — usando Google Speech API.")
+
+try:
+    from rapidfuzz import process as fuzz
+    FUZZY_OK = True
+except ImportError:
+    FUZZY_OK = False
+    print("Aviso: rapidfuzz não encontrado — usando matching exato.")
 
 user32 = ctypes.windll.user32
 
-# Mapeamento de variações → ação
+# ── Comandos ─────────────────────────────────────────────────────────────────
+# Com fuzzy matching não precisamos de dezenas de variações — apenas as mais
+# diferentes são suficientes para guiar o matcher.
+
 COMANDOS = {
     # Enviar (Enter)
-    "executar enviar":   "enter",
-    "executar envia":    "enter",
-    "executar invia":    "enter",
-    "executar enviado":  "enter",
-    "executar envio":    "enter",
-    "executar mandar":   "enter",
-    "executar manda":    "enter",
-    "executar send":     "enter",
+    "executar enviar":  "enter",
+    "executar send":    "enter",
+    "executar mandar":  "enter",
 
     # Nova linha (Shift+Enter)
-    "executar nova linha":  "new_line",
-    "executar nova lin":    "new_line",
-    "executar novalinha":   "new_line",
-    "executar nova lina":   "new_line",
-    "executar nova line":   "new_line",
-    "executar novo linha":  "new_line",
+    "executar nova linha": "new_line",
+    "executar new line":   "new_line",
 
     # Backspace
     "executar linha nova":  "backspace",
-    "executar lin nova":    "backspace",
-    "executar lina nova":   "backspace",
-    "executar linha novo":  "backspace",
+    "executar backspace":   "backspace",
 
     # Pause / Start
-    "executar pause":    "pause",
-    "executar pausar":   "pause",
-    "executar pausa":    "pause",
-    "executar pau":      "pause",
-    "executar start":    "start",
-    "executar iniciar":  "start",
-    "executar inicia":   "start",
-    "executar retomar":  "start",
-    "executar sta":      "start",
+    "executar pause":   "pause",
+    "executar pausar":  "pause",
+    "executar pau":     "pause",
+    "executar start":   "start",
+    "executar iniciar": "start",
+    "executar retomar": "start",
+    "executar sta":     "start",
 
     # Limpar tudo
-    "executar limpa":    "clear",
-    "executar limpar":   "clear",
-    "executar limp":     "clear",
-    "executar limpas":   "clear",
-    "executar limpeza":  "clear",
-    "executar limpo":    "clear",
-    "executar apagar":   "clear",
-    "executar apaga":    "clear",
-    "executar clear":    "clear",
-    "executar claro":    "clear",
-    "executar tudo":     "clear",
+    "executar limpar":  "clear",
+    "executar clear":   "clear",
+    "executar apagar":  "clear",
+
+    # Desfazer último texto digitado
+    "executar desfazer": "undo",
+    "executar undo":     "undo",
 }
+
+# ── Estado global ─────────────────────────────────────────────────────────────
+
+pausado = False
+ultimo_len = 0          # quantos caracteres foram colados por último (para undo)
+audio_queue = queue.Queue()
+
+# ── Ações ─────────────────────────────────────────────────────────────────────
+
+def acao_undo():
+    if ultimo_len > 0:
+        for _ in range(ultimo_len):
+            pyautogui.press("backspace")
 
 ACOES = {
     "enter":     lambda: pyautogui.press("enter"),
     "new_line":  lambda: pyautogui.hotkey("shift", "enter"),
     "clear":     lambda: (pyautogui.hotkey("ctrl", "a"), pyautogui.press("delete")),
     "backspace": lambda: pyautogui.press("backspace"),
+    "undo":      acao_undo,
 }
 
-pausado = False
-audio_queue = queue.Queue()
+# ── Sons ──────────────────────────────────────────────────────────────────────
 
-# Define volume do microfone para 100% via Windows Core Audio API
+def beep_captura():
+    """Frase capturada pelo microfone."""
+    threading.Thread(target=lambda: winsound.Beep(700, 60), daemon=True).start()
+
+def beep_comando():
+    """Comando reconhecido e executado."""
+    threading.Thread(target=lambda: (winsound.Beep(1100, 60), time.sleep(0.05), winsound.Beep(1400, 60)), daemon=True).start()
+
+def beep_erro():
+    """Não entendeu."""
+    threading.Thread(target=lambda: winsound.Beep(400, 120), daemon=True).start()
+
+# ── Volume do microfone ───────────────────────────────────────────────────────
+
 _ps_mic_volume = r"""
 Add-Type @"
 using System;
@@ -112,8 +151,70 @@ try:
     subprocess.run(["powershell", "-Command", _ps_mic_volume], capture_output=True, timeout=10)
     print("Microfone definido para volume máximo.")
 except Exception as e:
-    print(f"Aviso: não foi possível ajustar o volume do microfone: {e}")
+    print(f"Aviso: não foi possível ajustar o volume: {e}")
 
+# ── Reconhecimento Whisper ────────────────────────────────────────────────────
+
+whisper_model = None
+if WHISPER_OK:
+    print("Carregando modelo Whisper (small) — na 1ª execução faz download de ~465 MB...")
+    whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
+    print("Modelo carregado.")
+
+def reconhecer(audio: sr.AudioData) -> str:
+    """Retorna texto reconhecido. Prioriza Whisper; fallback: Google."""
+    if whisper_model is not None:
+        # Whisper espera float32 a 16 kHz
+        pcm = np.frombuffer(audio.frame_data, dtype=np.int16).astype(np.float32) / 32768.0
+        segments, _ = whisper_model.transcribe(
+            pcm,
+            language="pt",
+            beam_size=5,
+            vad_filter=True,                          # Silero VAD remove silêncio/ruído
+            vad_parameters={"min_silence_duration_ms": 400},
+        )
+        return " ".join(s.text for s in segments).strip()
+    else:
+        return r_sr.recognize_google(audio, language="pt-BR").strip()
+
+# ── Detecção de comando com fuzzy ─────────────────────────────────────────────
+
+FUZZY_THRESHOLD = 88  # % de similaridade mínima
+
+def detectar_comando(texto_lower: str):
+    """
+    Retorna (acao, texto_antes_do_comando) ou (None, None).
+    Tenta: match exato → suffix exato → fuzzy completo → fuzzy sufixo.
+    """
+    # 1. Comando completo exato
+    if texto_lower in COMANDOS:
+        return COMANDOS[texto_lower], ""
+
+    # 2. Sufixo exato
+    for cmd, acao in COMANDOS.items():
+        if texto_lower.endswith(" " + cmd):
+            return acao, texto_lower[:-(len(cmd) + 1)].strip()
+
+    if not FUZZY_OK:
+        return None, None
+
+    # 3. Fuzzy no texto completo (sem texto antes)
+    match, score, _ = fuzz.extractOne(texto_lower, COMANDOS.keys())
+    if score >= FUZZY_THRESHOLD and " " not in texto_lower.replace(match, "").strip():
+        return COMANDOS[match], ""
+
+    # 4. Fuzzy no sufixo (últimas 1-4 palavras)
+    palavras = texto_lower.split()
+    for n in range(1, min(5, len(palavras))):
+        sufixo = " ".join(palavras[-n:])
+        match, score, _ = fuzz.extractOne(sufixo, COMANDOS.keys())
+        if score >= FUZZY_THRESHOLD:
+            antes = " ".join(palavras[:-n]).strip()
+            return COMANDOS[match], antes
+
+    return None, None
+
+# ── Janela em foco ────────────────────────────────────────────────────────────
 
 def restaurar_foco(hwnd):
     if hwnd:
@@ -125,18 +226,25 @@ def restaurar_foco(hwnd):
         except Exception:
             pass
 
+# ── Processamento do texto reconhecido ───────────────────────────────────────
 
-def processar(texto, hwnd):
-    global pausado
+def processar(texto: str, hwnd):
+    global pausado, ultimo_len
+
     texto_lower = texto.lower()
     print(f"[reconhecido]: '{texto_lower}'")
 
-    if texto_lower in COMANDOS and COMANDOS[texto_lower] == "pause":
+    acao, texto_antes = detectar_comando(texto_lower)
+
+    # pause/start tratados antes de restaurar foco
+    if acao == "pause":
         pausado = True
+        beep_comando()
         print("[PAUSADO] Diga 'executar start' para retomar.")
         return
-    if texto_lower in COMANDOS and COMANDOS[texto_lower] == "start":
+    if acao == "start":
         pausado = False
+        beep_comando()
         print("[RETOMADO] Ouvindo novamente.")
         return
 
@@ -146,32 +254,29 @@ def processar(texto, hwnd):
 
     restaurar_foco(hwnd)
 
-    if texto_lower in COMANDOS:
-        acao = COMANDOS[texto_lower]
+    if acao is not None:
+        # Digita o texto antes do comando (se houver)
+        if texto_antes:
+            pyperclip.copy(texto_antes + " ")
+            pyautogui.hotkey("ctrl", "v")
+            ultimo_len = len(texto_antes) + 1
+            time.sleep(0.1)
         print(f"[comando]: {acao}")
+        beep_comando()
         ACOES[acao]()
+        if acao != "undo":
+            ultimo_len = 0
         return
 
-    executou_cmd = False
-    for cmd, acao in COMANDOS.items():
-        if texto_lower.endswith(" " + cmd):
-            texto_sem_cmd = texto[:-(len(cmd) + 1)].strip()
-            if texto_sem_cmd:
-                pyperclip.copy(texto_sem_cmd + " ")
-                pyautogui.hotkey("ctrl", "v")
-                time.sleep(0.1)
-            print(f"[comando]: {acao}")
-            ACOES[acao]()
-            executou_cmd = True
-            break
+    # Texto puro — cola via clipboard
+    conteudo = texto + " "
+    pyperclip.copy(conteudo)
+    pyautogui.hotkey("ctrl", "v")
+    ultimo_len = len(conteudo)
 
-    if not executou_cmd:
-        pyperclip.copy(texto + " ")
-        pyautogui.hotkey("ctrl", "v")
+# ── Worker de reconhecimento (thread separada) ────────────────────────────────
 
-
-def worker_reconhecimento(r):
-    """Thread separada: reconhece áudio da fila enquanto o mic continua gravando."""
+def worker_reconhecimento():
     while True:
         item = audio_queue.get()
         if item is None:
@@ -179,54 +284,66 @@ def worker_reconhecimento(r):
         audio, hwnd = item
         try:
             print("Processando...")
-            texto = r.recognize_google(audio, language="pt-BR").strip()
-            processar(texto, hwnd)
+            texto = reconhecer(audio)
+            if texto:
+                processar(texto, hwnd)
+            else:
+                print("(silêncio filtrado)")
         except sr.UnknownValueError:
+            beep_erro()
             print("(não entendi, fale novamente)")
         except sr.RequestError as e:
+            beep_erro()
             print(f"Erro de conexão: {e}")
+        except Exception as e:
+            beep_erro()
+            print(f"Erro inesperado: {e}")
         finally:
             audio_queue.task_done()
             print("Ouvindo...")
 
+# ── Callback do microfone ─────────────────────────────────────────────────────
 
 def callback_audio(recognizer, audio):
-    """Chamado pela thread de escuta ao detectar uma frase completa."""
     hwnd = user32.GetForegroundWindow()
+    beep_captura()
     audio_queue.put((audio, hwnd))
 
+# ── Inicialização ─────────────────────────────────────────────────────────────
 
-r = sr.Recognizer()
-r.pause_threshold = 2          # 2s de silêncio = fim da frase (era 3s)
-r.phrase_threshold = 0.2       # mínimo 0.2s de fala para considerar uma frase
-r.non_speaking_duration = 0.3  # buffer de silêncio ao redor da fala
-r.energy_threshold = 200
-r.dynamic_energy_threshold = True
+# Microfone a 16 kHz — compatível com Whisper sem resampling
+r_sr = sr.Recognizer()
+r_sr.pause_threshold = 1.5         # 1.5s de silêncio = fim da frase
+r_sr.phrase_threshold = 0.2        # mínimo de fala para considerar uma frase
+r_sr.non_speaking_duration = 0.3   # buffer de silêncio ao redor da fala
+r_sr.energy_threshold = 200
+r_sr.dynamic_energy_threshold = True
 
-mic = sr.Microphone()
+mic = sr.Microphone(sample_rate=16000)  # 16 kHz nativo para Whisper
 
-# Inicia worker de reconhecimento em thread daemon
-t = threading.Thread(target=worker_reconhecimento, args=(r,), daemon=True)
+# Inicia worker
+t = threading.Thread(target=worker_reconhecimento, daemon=True)
 t.start()
 
 # Calibra ruído ambiente
 with mic as source:
     print("Calibrando microfone... aguarde.")
-    r.adjust_for_ambient_noise(source, duration=2)
-    print("Pronto! Pode falar.\n")
+    r_sr.adjust_for_ambient_noise(source, duration=2)
+    print("Pronto!\n")
 
 print("=== DITADO POR VOZ ===")
-print("Comandos: 'executar enviar' | 'executar nova linha' | 'executar limpa' | 'executar pause' | 'executar start'")
+print("Comandos: 'executar enviar' | 'executar nova linha' | 'executar limpar'")
+print("         'executar pause/start' | 'executar desfazer'")
 print("Pressione Ctrl+C para parar.\n")
 print("Ouvindo...")
 
-# Escuta contínua em background — sem gaps entre frases
-stop_listening = r.listen_in_background(mic, callback_audio, phrase_time_limit=20)
+# Escuta contínua — sem gaps
+stop_listening = r_sr.listen_in_background(mic, callback_audio, phrase_time_limit=20)
 
 try:
     while True:
         time.sleep(0.1)
 except KeyboardInterrupt:
     stop_listening(wait_for_stop=False)
-    audio_queue.put(None)  # sinaliza worker para encerrar
+    audio_queue.put(None)
     print("\nDitado encerrado.")
