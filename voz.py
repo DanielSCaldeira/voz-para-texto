@@ -5,18 +5,17 @@ import time
 
 COMANDOS = {
     "enter": lambda: pyautogui.press("enter"),
-    "enviar": lambda: pyautogui.press("enter"),
-    "apagar": lambda: pyautogui.press("backspace"),
-    "limpar": lambda: (pyautogui.hotkey("ctrl", "a"), pyautogui.press("delete")),
-    "nova linha": lambda: pyautogui.press("enter"),
+    "new line": lambda: pyautogui.press("enter"),
+    "clear": lambda: (pyautogui.hotkey("ctrl", "a"), pyautogui.press("delete")),
 }
 
 print("=== DITADO POR VOZ ===")
 print("Fale qualquer coisa - o texto será digitado automaticamente.")
 print()
 print("Comandos de voz disponíveis:")
-for cmd in COMANDOS:
-    print(f"  '{cmd}' → ação especial")
+print("  'enter'    → pressiona Enter")
+print("  'new line' → nova linha")
+print("  'clear'    → limpa tudo")
 print()
 print("Pressione Ctrl+C para parar.\n")
 
