@@ -24,7 +24,8 @@ ACOES = {
 def restaurar_foco(hwnd):
     if hwnd:
         try:
-            user32.ShowWindow(hwnd, 9)
+            if user32.IsIconic(hwnd):  # só restaura se estiver minimizada
+                user32.ShowWindow(hwnd, 9)
             user32.SetForegroundWindow(hwnd)
             time.sleep(0.15)
         except Exception:
