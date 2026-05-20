@@ -6,7 +6,7 @@ import time
 COMANDOS = {
     "enter": lambda: pyautogui.press("enter"),
     "enviar": lambda: pyautogui.press("enter"),
-    "apagar": lambda: pyautogui.hotkey("ctrl", "z"),
+    "apagar": lambda: pyautogui.press("backspace"),
     "limpar": lambda: (pyautogui.hotkey("ctrl", "a"), pyautogui.press("delete")),
     "nova linha": lambda: pyautogui.press("enter"),
 }
