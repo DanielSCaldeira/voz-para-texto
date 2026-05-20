@@ -1,6 +1,7 @@
 import speech_recognition as sr
 import pyautogui
 import pyperclip
+import pygetwindow as gw
 import time
 
 COMANDOS = {
@@ -10,8 +11,6 @@ COMANDOS = {
 }
 
 print("=== DITADO POR VOZ ===")
-print("Fale qualquer coisa - o texto será digitado automaticamente.")
-print()
 print("Comandos de voz disponíveis:")
 print("  'enter'    → pressiona Enter")
 print("  'new line' → nova linha")
@@ -27,8 +26,16 @@ with mic as source:
     r.adjust_for_ambient_noise(source, duration=2)
     print("Pronto! Pode falar.\n")
 
+janela_ativa = None
+
 while True:
     try:
+        # Salva a janela ativa antes de ouvir
+        try:
+            janela_ativa = gw.getActiveWindow()
+        except Exception:
+            janela_ativa = None
+
         with mic as source:
             print("Ouvindo...")
             audio = r.listen(source, timeout=None, phrase_time_limit=15)
@@ -36,6 +43,14 @@ while True:
         print("Processando...")
         texto = r.recognize_google(audio, language="pt-BR").strip()
         print(f"Você disse: {texto}")
+
+        # Volta o foco para a janela anterior
+        if janela_ativa:
+            try:
+                janela_ativa.activate()
+                time.sleep(0.2)
+            except Exception:
+                pass
 
         texto_lower = texto.lower()
 
