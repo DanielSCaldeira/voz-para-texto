@@ -8,25 +8,10 @@ user32 = ctypes.windll.user32
 
 # Mapeamento de variações → ação
 COMANDOS = {
-    # Enter
-    "enter": "enter",
-    "entrar": "enter",
-    "inter": "enter",
-    "enter key": "enter",
-    # New line
-    "new line": "new_line",
-    "new lan": "new_line",
-    "nu line": "new_line",
-    "nova linha": "new_line",
-    # Clear
-    "clear": "clear",
-    "claro": "clear",
-    "clier": "clear",
-    "clear all": "clear",
-    # Backspace
-    "apagar": "backspace",
-    "delete": "backspace",
-    "deletar": "backspace",
+    "comando enter":     "enter",
+    "comando linha":     "new_line",
+    "comando limpa":     "clear",
+    "comando backspace": "backspace",
 }
 
 ACOES = {
@@ -46,7 +31,7 @@ def restaurar_foco(hwnd):
             pass
 
 print("=== DITADO POR VOZ ===")
-print("Comandos: enter | new line | clear | apagar")
+print("Comandos: 'comando enter' | 'comando linha' | 'comando limpa' | 'comando backspace'")
 print("Pressione Ctrl+C para parar.\n")
 
 r = sr.Recognizer()
