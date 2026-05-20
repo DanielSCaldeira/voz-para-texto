@@ -37,10 +37,12 @@ COMANDOS = {
     "executar pause":    "pause",
     "executar pausar":   "pause",
     "executar pausa":    "pause",
+    "executar pau":      "pause",
     "executar start":    "start",
     "executar iniciar":  "start",
     "executar inicia":   "start",
     "executar retomar":  "start",
+    "executar sta":      "start",
 
     # Limpar tudo
     "executar limpa":    "clear",
