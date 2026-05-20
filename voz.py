@@ -33,6 +33,15 @@ COMANDOS = {
     "executar lina nova":   "backspace",
     "executar linha novo":  "backspace",
 
+    # Pause / Start
+    "executar pause":    "pause",
+    "executar pausar":   "pause",
+    "executar pausa":    "pause",
+    "executar start":    "start",
+    "executar iniciar":  "start",
+    "executar inicia":   "start",
+    "executar retomar":  "start",
+
     # Limpar tudo
     "executar limpa":    "clear",
     "executar limpar":   "clear",
@@ -53,6 +62,8 @@ ACOES = {
     "clear":     lambda: (pyautogui.hotkey("ctrl", "a"), pyautogui.press("delete")),
     "backspace": lambda: pyautogui.press("backspace"),
 }
+
+pausado = False
 
 def restaurar_foco(hwnd):
     if hwnd:
@@ -135,6 +146,20 @@ while True:
         texto = r.recognize_google(audio, language="pt-BR").strip()
         texto_lower = texto.lower()
         print(f"[reconhecido]: '{texto_lower}'")  # DEBUG: mostra exatamente o que chegou
+
+        # Verifica pause/start antes de restaurar foco
+        if texto_lower in COMANDOS and COMANDOS[texto_lower] == "pause":
+            pausado = True
+            print("[PAUSADO] Diga 'executar start' para retomar.")
+            continue
+        if texto_lower in COMANDOS and COMANDOS[texto_lower] == "start":
+            pausado = False
+            print("[RETOMADO] Ouvindo novamente.")
+            continue
+
+        if pausado:
+            print("(pausado — ignorando)")
+            continue
 
         restaurar_foco(hwnd)
 
