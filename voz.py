@@ -31,8 +31,6 @@ COMANDOS = {
     "executar lin nova":    "backspace",
     "executar lina nova":   "backspace",
     "executar linha novo":  "backspace",
-    "executar apagar":      "backspace",
-    "executar apaga":       "backspace",
 
     # Limpar tudo
     "executar limpa":    "clear",
@@ -41,6 +39,8 @@ COMANDOS = {
     "executar limpas":   "clear",
     "executar limpeza":  "clear",
     "executar limpo":    "clear",
+    "executar apagar":   "clear",
+    "executar apaga":    "clear",
     "executar clear":    "clear",
     "executar claro":    "clear",
     "executar tudo":     "clear",
