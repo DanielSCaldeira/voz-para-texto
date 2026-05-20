@@ -16,7 +16,7 @@ COMANDOS = {
 
 ACOES = {
     "enter":     lambda: pyautogui.press("enter"),
-    "new_line":  lambda: pyautogui.press("enter"),
+    "new_line":  lambda: pyautogui.hotkey("shift", "enter"),
     "clear":     lambda: (pyautogui.hotkey("ctrl", "a"), pyautogui.press("delete")),
     "backspace": lambda: pyautogui.press("backspace"),
 }
