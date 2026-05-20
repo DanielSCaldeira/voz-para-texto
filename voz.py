@@ -1,14 +1,25 @@
 import speech_recognition as sr
 import pyautogui
 import pyperclip
-import pygetwindow as gw
+import ctypes
 import time
+
+user32 = ctypes.windll.user32
 
 COMANDOS = {
     "enter": lambda: pyautogui.press("enter"),
     "new line": lambda: pyautogui.press("enter"),
     "clear": lambda: (pyautogui.hotkey("ctrl", "a"), pyautogui.press("delete")),
 }
+
+def restaurar_foco(hwnd):
+    if hwnd:
+        try:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+            time.sleep(0.15)
+        except Exception:
+            pass
 
 print("=== DITADO POR VOZ ===")
 print("Comandos de voz disponíveis:")
@@ -26,31 +37,21 @@ with mic as source:
     r.adjust_for_ambient_noise(source, duration=2)
     print("Pronto! Pode falar.\n")
 
-janela_ativa = None
-
 while True:
     try:
-        # Salva a janela ativa antes de ouvir
-        try:
-            janela_ativa = gw.getActiveWindow()
-        except Exception:
-            janela_ativa = None
-
         with mic as source:
             print("Ouvindo...")
             audio = r.listen(source, timeout=None, phrase_time_limit=15)
+
+        # Salva a janela ativa logo após capturar o áudio
+        hwnd = user32.GetForegroundWindow()
 
         print("Processando...")
         texto = r.recognize_google(audio, language="pt-BR").strip()
         print(f"Você disse: {texto}")
 
-        # Volta o foco para a janela anterior
-        if janela_ativa:
-            try:
-                janela_ativa.activate()
-                time.sleep(0.2)
-            except Exception:
-                pass
+        # Restaura o foco para a janela onde o usuário estava
+        restaurar_foco(hwnd)
 
         texto_lower = texto.lower()
 
@@ -58,7 +59,6 @@ while True:
             print(f"[comando: {texto_lower}]")
             COMANDOS[texto_lower]()
         else:
-            # Verifica se termina com um comando
             for cmd, acao in COMANDOS.items():
                 if texto_lower.endswith(" " + cmd):
                     texto_sem_cmd = texto[:-(len(cmd) + 1)].strip()
